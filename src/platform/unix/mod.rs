@@ -99,10 +99,18 @@ pub unsafe fn init_os_handler() -> Result<(), Error> {
         signal::SigSet::empty(),
     );
 
-    signal::sigaction(signal::Signal::SIGINT, &new_action)?;
+    let sigint_old = match signal::sigaction(signal::Signal::SIGINT, &new_action) {
+        Ok(old) => old,
+        Err(e) => return Err(close_pipe(e)),
+    };
 
     #[cfg(feature = "termination")]
     {
+        let sigint_old = match signal::sigaction(signal::Signal::SIGINT, &new_action) {
+            Ok(old) => old,
+            Err(e) => return Err(close_pipe(e)),
+        };
+
         let sigterm_old = match signal::sigaction(signal::Signal::SIGTERM, &new_action) {
             Ok(old) => old,
             Err(e) => {
