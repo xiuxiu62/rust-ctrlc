@@ -87,7 +87,7 @@ static INIT: AtomicBool = AtomicBool::new(false);
 ///
 pub fn set_handler<F>(mut user_handler: F) -> Result<(), Error>
 where
-    F: FnMut() -> () + 'static + Send,
+    F: FnMut() -> Result<(), Error> + 'static + Send,
 {
     if INIT.compare_and_swap(false, true, Ordering::SeqCst) {
         return Err(Error::MultipleHandlers);
@@ -103,15 +103,20 @@ where
         }
     }
 
-    thread::Builder::new()
-        .name("ctrl-c".into())
-        .spawn(move || loop {
-            unsafe {
-                platform::block_ctrl_c().expect("Critical system error while waiting for Ctrl-C");
-            }
-            user_handler();
-        })
-        .expect("failed to spawn thread");
+    if let Err(err) =
+        thread::Builder::new()
+            .name("ctrl-c".into())
+            .spawn(move || -> Result<(), Error> {
+                loop {
+                    unsafe {
+                        platform::block_ctrl_c()?;
+                    }
+                    user_handler()?;
+                }
+            })
+    {
+        return Err(Error::System(err));
+    };
 
     Ok(())
 }
